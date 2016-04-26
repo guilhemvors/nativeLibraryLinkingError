@@ -1,0 +1,113 @@
+import org.apache.tools.ant.taskdefs.condition.Os
+
+apply plugin: 'com.android.model.native'
+
+
+def ndkDir = System.getenv("ANDROID_NDK_HOME")
+def propertiesFile = project.rootProject.file('local.properties')
+if (propertiesFile.exists()) {
+    Properties properties = new Properties()
+    properties.load(propertiesFile.newDataInputStream())
+    ndkDir = properties.getProperty('ndk.dir')
+}
+
+model {
+    repositories {
+        libs(PrebuiltLibraries) {
+            curl {
+                headers.srcDir "libs/curl/include/android"
+                binaries.withType(SharedLibraryBinary) {
+                    sharedLibraryFile = file("libs/curl/prebuilt/android/${targetPlatform.getName()}/libcurl.a")
+                }
+            }
+            ssl {
+                headers.srcDir "libs/ssl/include/"
+                binaries.withType(SharedLibraryBinary) {
+                    sharedLibraryFile = file("libs/ssl/prebuilt/${targetPlatform.getName()}/libssl.a")
+                }
+            }
+            crypto {
+                headers.srcDir "libs/crypto/include/"
+                binaries.withType(SharedLibraryBinary) {
+                    sharedLibraryFile = file("libs/crypto/prebuilt/${targetPlatform.getName()}/libcrypto.a")
+                }
+            }
+        }
+    }
+
+    android {
+        compileSdkVersion = 23
+        buildToolsVersion = "23.0.2"
+
+        defaultConfig.with {
+            minSdkVersion.apiLevel = 17
+            targetSdkVersion.apiLevel = 22
+        }
+    }
+
+    android.ndk {
+        moduleName = "myNativeLibrary"
+        stl = "c++_static"
+        cppFlags.addAll(["-std=c++11", "-pthread", "-fexceptions", "-frtti", "-DUSE_FILE32API"])
+        ldLibs.addAll(["atomic", "log", "android", "EGL", "GLESv2", "z", "OpenSLES"])
+        abiFilters.addAll(["armeabi-v7a", "x86"])
+
+        CFlags.add("-DUSE_FILE32API")
+        CFlags.add("-fexceptions")
+    }
+
+    android.sources {
+        main {
+            jni {
+                source {
+                    // INTERNAL CPP FILES
+                    srcDir "src/main/jni"
+                }
+
+                exportedHeaders {
+
+                    srcDir "src/main/jni"
+                    // STATIC LIBRARIES
+                    srcDir "../../../../external/ssl/include/"
+                    srcDir "../../../../external/curl/include/android"
+                }
+
+                dependencies {
+                    library "curl"
+                    library "ssl"
+                    library "crypto"
+                }
+            }
+        }
+    }
+
+    android.buildTypes {
+        release {
+
+        }
+        debug {
+            ndk.with {
+                debuggable = true
+            }
+        }
+    }
+
+    android.productFlavors {
+        create ("arm") {
+            ndk.with {
+                abiFilters.add("armeabi-v7a")
+                ldFlags.addAll([
+                        "-L${file("./obj/local/armeabi-v7a")}".toString()
+                ])
+            }
+        }
+        create("x86") {
+            ndk.with {
+                abiFilters.add("x86")
+                ldFlags.addAll([
+                        "-L${file("./obj/local/x86")}".toString()
+                ])
+            }
+        }
+    }
+}
